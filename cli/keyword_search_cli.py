@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import string
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Key word Search CLI")
@@ -23,12 +24,23 @@ def main() -> None:
                 data = json.load(f)
                 movies = data.get("movies", data)
             results = []
+            translator = str.maketrans("", "", string.punctuation)
+
+            clean_query = args.query.lower().translate(translator)
+            query_tokens = [t for t in clean_query.split() if t]
+            query_token_set = set(query_tokens)
+
             for movie in movies:
-                if args.query.lower() in movie["title"].lower():
+                
+                clean_title = movie["title"].lower().translate(translator)
+                title_tokens = [t for t in clean_title.split() if t]
+                title_token_set = set(title_tokens)
+
+                if any(q in t for q in query_token_set for t in title_token_set):
                     results.append(movie)
 
             for i, movie in enumerate(results[:5], start=1):
-                print(f"{i}. {movie["title"]} {i}")
+                print(f"{i}. {movie['title']} {i}")
                     
                     
         case _:
