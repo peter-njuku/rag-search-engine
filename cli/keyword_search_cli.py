@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 import string
 
+from stopwords import load_stopwords
+
+stopwords = load_stopwords()
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Key word Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -27,13 +31,16 @@ def main() -> None:
             translator = str.maketrans("", "", string.punctuation)
 
             clean_query = args.query.lower().translate(translator)
-            query_tokens = [t for t in clean_query.split() if t]
+            query_tokens = [t for t in clean_query.split() if t not in stopwords]
+        
             query_token_set = set(query_tokens)
 
             for movie in movies:
+
+                
                 
                 clean_title = movie["title"].lower().translate(translator)
-                title_tokens = [t for t in clean_title.split() if t]
+                title_tokens = [t for t in clean_title.split() if t not in stopwords]
                 title_token_set = set(title_tokens)
 
                 if any(q in t for q in query_token_set for t in title_token_set):
