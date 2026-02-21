@@ -6,6 +6,9 @@ from pathlib import Path
 import string
 
 from stopwords import load_stopwords
+from nltk.stem import PorterStemmer
+
+stemmer = PorterStemmer()
 
 stopwords = load_stopwords()
 
@@ -32,7 +35,9 @@ def main() -> None:
 
             clean_query = args.query.lower().translate(translator)
             query_tokens = [t for t in clean_query.split() if t not in stopwords]
-        
+            stem = lambda t: stemmer.stem(t)
+            query_tokens = [stem(t) for t in query_tokens]
+            print(query_tokens)
             query_token_set = set(query_tokens)
 
             for movie in movies:
