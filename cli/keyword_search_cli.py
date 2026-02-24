@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import string
 
@@ -11,6 +12,32 @@ from nltk.stem import PorterStemmer
 stemmer = PorterStemmer()
 
 stopwords = load_stopwords()
+
+def cache_dir() -> Path:
+    os.makedirs("cache", exist_ok=True)
+    return Path("cache")
+
+class InvertedIndex:
+    def __init__(self, index: dict[str, set[int]], docmap: dict[int, str]):
+        self.index = index
+        self.docmap = docmap
+        self.index_doc = cache_dir() / "index.pkl"
+        self.docmap_doc = cache_dir() / "docmap.pkl"
+
+    def __add_document(self, doc_id, text):
+        translator = str.maketrans("", "", string.punctuation)
+        clean_text = text.lower().translate(translator)
+        tokens = [t for t in clean_text.split() if t not in stopwords]
+        stem = lambda t: stemmer.stem(t)
+        tokens = [stem(t) for t in tokens]
+
+        for token in tokens:
+            if token not in self.index:
+                self.index[token] = set()
+            self.index[token].add(doc_id)
+
+    def get_documents(self, term):
+        return sorted(list(self.index.get(term.lower(), set())))
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Key word Search CLI")
@@ -40,10 +67,7 @@ def main() -> None:
             print(query_tokens)
             query_token_set = set(query_tokens)
 
-            for movie in movies:
-
-                
-                
+            for movie in movies:                
                 clean_title = movie["title"].lower().translate(translator)
                 title_tokens = [t for t in clean_title.split() if t not in stopwords]
                 title_token_set = set(title_tokens)
