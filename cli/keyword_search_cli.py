@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import pickle
 import string
 
 from stopwords import load_stopwords
@@ -38,12 +39,36 @@ class InvertedIndex:
 
     def get_documents(self, term):
         return sorted(list(self.index.get(term.lower(), set())))
+    def build(self):
+        movie_path = Path(__file__).parent.parent / "data" / "movies.json"
+
+        with open(movie_path, "r") as f:
+            data = json.load(f)
+            movies = data.get("movies", data)
+
+
+        for i, movie in enumerate(movies, start=1):
+            text = f"{movie['title']} {movie['description']}"
+            self.__add_document(i, text)
+            self.docmap[i] = movie["title"]
+
+            
+
+
+    def save(self):
+        with open (self.index_doc, "wb") as f:
+            pickle.dump(self.index, f)
+
+        with open (self.docmap_doc, "wb") as f:
+            pickle.dump(self.docmap, f)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Key word Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     search_parsers = subparsers.add_parser("search", help="Search movies using BM25")
+    build_parser = subparsers.add_parser("build", help="Build Inverted Index")
+
     search_parsers.add_argument("query", type=str, help="Search query")
     
     args = parser.parse_args()
@@ -77,7 +102,15 @@ def main() -> None:
 
             for i, movie in enumerate(results[:5], start=1):
                 print(f"{i}. {movie['title']} {i}")
-                    
+
+        case "build":
+            print("Building Inverted index")
+            index = InvertedIndex({}, {})
+            index.build()
+            index.save()
+            docs = index.get_documents("merida") if "merida" else None
+            print(f"First document for token 'merida' = {docs[0]}") if docs else None
+
                     
         case _:
             parser.print_help()
