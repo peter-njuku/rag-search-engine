@@ -153,8 +153,27 @@ class InvertedIndex:
         index = InvertedIndex({}, {})
         index.load()
         bm25_tf_score = index.get_bm25_tf(doc_id, term, k1, b)
-        return bm25_tf_score
+        return bm25_tf_score 
+    
+    def bm25(self, doc_id, term) -> float:
+        bm25_tf = self.get_bm25_tf(doc_id, term)
+        bm25_idf = self.get_bm25_idf(term)
+        BM25_score = bm25_tf * bm25_idf
+        return BM25_score
 
+    def bm25_search(self, query, limit):
+        translator = str.maketrans("", "", string.punctuation)
+        clean_query = query.lower().translate(translator)
+        query_tokens = clean_query.split()
+        stem = lambda t: stemmer.stem(t)
+        query_tokens = [stem(t) for t in query_tokens]
+
+        scores_dict = {}
+        for doc_id in self.docmap.keys():
+            score = sum(self.bm25(doc_id, token) for token in query_tokens)
+            scores_dict[doc_id] = score
+        sorted_docs = sorted(scores_dict.items(), key=lambda x: x[1], reverse=True)
+        return sorted_docs[:limit]
 
     def save(self):
         with open (self.index_doc, "wb") as f:
@@ -230,6 +249,9 @@ def main() -> None:
     bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF score for")
     bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable BM25 K1 parameter")
     bm25_tf_parser.add_argument("b", type=float, nargs='?', default=BM25_B, help="Tunable BM25 B parameter")
+
+    bm25search_parser = subparsers.add_parser("bm25search", help="Search movies using full BM25 scoring")
+    bm25search_parser.add_argument("query", type=str, help="Search query")
 
     args = parser.parse_args()
 
@@ -329,7 +351,16 @@ def main() -> None:
                 print(f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25_tf_score:.2f}")
             except ValueError as e:
                 print(f"Error: {e}")
-                exit(1) 
+                exit(1)
+
+        case "bm25search":
+            print(f"Searching for: {args.query} using BM25")
+            index = InvertedIndex({}, {})
+            index.load()
+            results = index.bm25_search(args.query, limit=10)
+            for i, (doc_id, score) in enumerate(results, ):
+                print(f"{i}. ({doc_id}) {index.docmap[doc_id]} - Score: {score:.2f}")
+
 
         case _:
             parser.print_help()
