@@ -13,10 +13,9 @@ from stopwords import load_stopwords
 from nltk.stem import PorterStemmer
 
 stemmer = PorterStemmer()
-
 stopwords = load_stopwords()
-
 BM25_K1 = 1.5
+BM25_B = 0.75
 
 def cache_dir() -> Path:
     os.makedirs("cache", exist_ok=True)
@@ -30,6 +29,8 @@ class InvertedIndex:
         self.index_doc = cache_dir() / "index.pkl"
         self.docmap_doc = cache_dir() / "docmap.pkl"
         self.term_freq_doc = cache_dir() / "term_freq.pkl"
+        self.doc_lengths = {}
+        self.doc_lengths_doc = cache_dir() / "doc_lengths.pkl"
 
 
     def __add_document(self, doc_id, text):
@@ -40,6 +41,8 @@ class InvertedIndex:
         tokens = [stem(t) for t in tokens]
         token_counter = Counter(tokens)
 
+        self.doc_lengths[doc_id] = len(tokens)
+
         self.term_freq[doc_id] = token_counter
 
 
@@ -47,6 +50,11 @@ class InvertedIndex:
             if token not in self.index:
                 self.index[token] = set()
             self.index[token].add(doc_id)
+
+    def __get_avg_doc_length(self) -> float:
+        total_length = sum(self.doc_lengths.values())
+        num_docs = len(self.doc_lengths)
+        return total_length / num_docs if num_docs > 0 else 0.0
 
     def get_documents(self, term):
         """
@@ -127,16 +135,24 @@ class InvertedIndex:
 
         return bm25_idf_score
 
-    def get_bm25_tf(self, doc_id:int, term: str, k1=BM25_K1) -> float:
+    def get_bm25_tf(self, doc_id:int, term: str, k1=BM25_K1, b:float=BM25_B) -> float:
         tf = self.get_tf(doc_id, term)
 
-        saturated_tf_score = (tf * (k1 + 1)) / (tf + k1)
+        doc_length = self.doc_lengths.get(doc_id, 0)
+        avg_doc_length = self.__get_avg_doc_length()
+
+        if avg_doc_length > 0:
+            length_norm = (1 - b) + b * (doc_length / avg_doc_length)
+        else:
+            length_norm = 1.0
+            
+        saturated_tf_score = (tf * (k1 + 1)) / (tf + k1 * length_norm) #if tf > 0 else 0.0
         return saturated_tf_score
 
-    def bm25_tf_command(doc_id: int, term:str, k1:float | None) -> float:
+    def bm25_tf_command(doc_id: int, term:str, k1:float | None, b:float=BM25_B) -> float:
         index = InvertedIndex({}, {})
         index.load()
-        bm25_tf_score = index.get_bm25_tf(doc_id, term, k1)
+        bm25_tf_score = index.get_bm25_tf(doc_id, term, k1, b)
         return bm25_tf_score
 
 
@@ -147,8 +163,11 @@ class InvertedIndex:
         with open (self.docmap_doc, "wb") as f:
             pickle.dump(self.docmap, f)
 
-        with open (cache_dir() / "term_freq.pkl", "wb") as f:
+        with open (self.term_freq_doc, "wb") as f:
             pickle.dump(self.term_freq, f)
+
+        with open(self.doc_lengths_doc, "wb") as f:
+            pickle.dump(self.doc_lengths, f)
 
     def load(self):
         try:
@@ -160,6 +179,9 @@ class InvertedIndex:
 
             with open (cache_dir() / "term_freq.pkl", "rb") as f:
                 self.term_freq = pickle.load(f)
+
+            with open(cache_dir() / "doc_lengths.pkl", "rb") as f:
+                self.doc_lengths = pickle.load(f)
 
         except FileNotFoundError:
             print("No cached index found. Please run 'build' command first.")
@@ -207,6 +229,7 @@ def main() -> None:
     bm25_tf_parser.add_argument("doc_id", type=int, help="Document ID")
     bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF score for")
     bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable BM25 K1 parameter")
+    bm25_tf_parser.add_argument("b", type=float, nargs='?', default=BM25_B, help="Tunable BM25 B parameter")
 
     args = parser.parse_args()
 
@@ -300,9 +323,9 @@ def main() -> None:
                 print(f"Error: {e}")
                 exit(1)
         case "bm25tf":
-            print(f"Getting BM25 TF score for doc_id: {args.doc_id}, term: {args.term}, k1: {args.k1}")
+            print(f"Getting BM25 TF score for doc_id: {args.doc_id}, term: {args.term}, k1: {args.k1}, b: {args.b}")
             try:
-                bm25_tf_score = InvertedIndex.bm25_tf_command(args.doc_id, args.term, args.k1)
+                bm25_tf_score = InvertedIndex.bm25_tf_command(args.doc_id, args.term, args.k1, args.b)
                 print(f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25_tf_score:.2f}")
             except ValueError as e:
                 print(f"Error: {e}")
